@@ -1,8 +1,6 @@
 use crate::handlers::{root::root, todo_hander::{create_todo, get_todos, get_todos_by_id, change_status, delete_todo}};
 use crate::schema::todo::TodoStorage;
 
-use std::fs::File;
-
 use axum::{
     Router,
     routing::{delete, get, post, put},

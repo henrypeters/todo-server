@@ -87,9 +87,14 @@
 
 
 
+use std::io::ErrorKind::Other;
+
 use axum::http::status;
 use serde::{Deserialize, Serialize};
+use tokio::sync::futures::OwnedNotified;
 use uuid::Uuid;
+
+use crate::utils::util::{load_todos, save_todos};
 
 #[derive(Deserialize)]
 pub struct CreateTodoPayload {
@@ -117,7 +122,7 @@ pub struct TodoStorage {
     pub todos: Vec<Todo>
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Todo {
     pub id: Uuid,
     pub name: String,
@@ -145,17 +150,28 @@ impl Status {
 
 impl TodoStorage {
     pub fn new() -> Self{
+        let todos = load_todos();
+
         Self { 
-            todos: vec![]
+            todos: todos
         }
     }
 
-    pub fn add(&mut self, todo: Todo) {
+    pub fn add(&mut self, todo: Todo) -> std::io::Result<()> {
         self.todos.push(todo);
+        let new_collection = &self.todos;
+
+        println!("Todos in memory {}", self.todos.len());
+
+        save_todos(new_collection)
     }
 
     pub fn get_all(&self) -> &[Todo] {
         &self.todos
+    }
+
+    pub fn save_to_file(&self, todos: &[Todo]) -> std::io::Result<()> {
+        save_todos(todos)
     }
 
     pub fn get_todo_by_id(&self, id: Uuid) -> Option<&Todo> {
@@ -170,35 +186,44 @@ impl TodoStorage {
         }
     }
 
-    pub fn change_status(&mut self, id: Uuid, status: u8) -> Option<Todo> {
-        let index = self.todos.iter().position(|todo| todo.id == id);
-         
-        match index {
-            Some(t) => {
-                let todo = &mut self.todos[t];
+    pub fn change_status(&mut self, id: Uuid, status: u8) -> std::io::Result<Todo> {
+        let new_status = Status::map_id_to_status(status);
 
-                if todo.status != Status::map_id_to_status(status) {
-                    todo.status = Status::map_id_to_status(status);
-                    Some(todo.clone())
-                }else {
-                    None
-                }
-            },
-            None => None
-        }
+        let updated_todo = {
+            let todo = self.todos.iter_mut().find(|todo| todo.id == id).ok_or(std::io::Error::other("Cannot find todo"))?;
+
+            if todo.status == new_status {
+                return Err(std::io::Error::other("Status already set"))
+            }
+
+            todo.status = new_status;
+            todo.clone()
+        };
+
+        self.save_to_file(&self.todos)?;    // match self.save_to_file() {
+                                            // Ok(()) => (),
+                                            // Err(e) => return Err(std::io::Error())
+                                            // },
+
+        Ok(updated_todo)
+
+
     }
 
-    pub fn delete_todo(&mut self, id: Uuid) -> Option<Todo> {
-        let index = self.todos.iter().position(|todo| todo.id == id);
+    pub fn delete_todo(&mut self, id: Uuid) -> std::io::Result<Todo> {
 
-        match index {
-            Some(t) => {
-                let todo = &mut self.todos.remove(t);
+        let index = self.todos.iter().position(|todo| todo.id == id).ok_or(std::io::Error::other("todo index not found"))?;
+        let todo = {
+            let todo = &self.todos[index];
 
-                Some(todo.clone())
-            },
-            None => None
-        }
+            todo.clone()
+        };
+        
+        self.todos.remove(index);
+
+        self.save_to_file(&self.todos)?;
+
+        Ok(todo)
     }
 
     // pub fn change_status()

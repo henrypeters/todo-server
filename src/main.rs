@@ -90,6 +90,7 @@
 mod handlers;
 mod routes;
 mod schema;
+mod utils;
 
 const PORT: &str = "127.0.0.1:3000";
 
@@ -101,6 +102,8 @@ async fn main() {
     let app = routes::axum_router().await;
     // run our app with hyper, listening globally on port 3000
     let listener = tokio::net::TcpListener::bind(PORT).await.unwrap();
+
+    println!("Current directory: {:?}", std::env::current_dir().unwrap());
 
     tracing::info!("server running on {PORT}");
     axum::serve(listener, app).await.unwrap();

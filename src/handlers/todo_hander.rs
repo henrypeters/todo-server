@@ -4,12 +4,14 @@ use uuid::Uuid;
 
 use axum::extract::State;
 use axum::{Json, http::StatusCode};
+
+// #[axum::debug_handler]
 pub async fn create_todo(
     // this argument tells axum to parse the request body
     // as JSON into a `CreateUserPayload` type
     State(state): State<AppState>,
     Json(payload): Json<CreateTodoPayload>
-) -> (StatusCode, Json<Todo>) {
+) -> Result<(StatusCode, Json<Todo>), String> {
     // insert your application logic here
     let todo = Todo {
         id: Uuid::new_v4(),
@@ -18,11 +20,15 @@ pub async fn create_todo(
     };
 
     let mut store = state.container.lock().unwrap();
-    store.add(todo.clone());
+    match store.add(todo.clone()) {
+        Ok(()) => (),
+        Err(_) => return Err("Failed to add file".to_string())
+    };
+
 
     // this will be converted into a JSON response
     // with a status code of `201 Created`
-    (StatusCode::CREATED, Json(todo))
+    Ok((StatusCode::CREATED, Json(todo)))
 }
 
 
@@ -66,12 +72,12 @@ pub async fn change_status(
     let todo = {
         let mut store = state.container.lock().unwrap();
         match store.change_status(payload.id, payload.status) {
-            Some(todo) => Ok((StatusCode::FOUND, Json(todo))),
-            None => Err(StatusCode::NOT_FOUND)
+            Ok(todo) => todo,
+            Err(_) => return Err(StatusCode::NOT_FOUND)
         }
     };
     
-    todo
+    Ok((StatusCode::FOUND, Json(todo)))
 }
 
 
@@ -84,10 +90,10 @@ pub async fn delete_todo(
         let mut store = state.container.lock().unwrap();
 
         match store.delete_todo(payload.id) {
-            Some(t) => Ok((StatusCode::FOUND, Json(t))),
-            None => Err(StatusCode::NOT_FOUND)
+            Ok(t) => t,
+            Err(_) => return Err(StatusCode::NOT_FOUND)
         }
     };
 
-    todo
+    Ok((StatusCode::FOUND, Json(todo)))
 }
